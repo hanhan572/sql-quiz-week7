@@ -1,6 +1,7 @@
-
 streamlit>=1.40,<2
 supabase>=2.10,<3
 psycopg[binary]>=3.2,<4
 pandas>=2.2,<3
 sqlparse>=0.5,<1
+chromadb>=1.0,<2
+requests>=2.31,<3

@@ -1,8 +1,71 @@
-# Online Store SQL Quiz
+# Online Store SQL Quiz + RAG Text-to-SQL
 
-**Week 7 Major Assignment — Build a SQL Quiz with Supabase**
+**Week 7: SQL Quiz with Supabase · Week 8: RAG-Powered Text-to-SQL**
 
 An interactive SQL quiz application built with Python, Streamlit, Supabase PostgreSQL, Supabase Authentication, and GitHub Actions.
+
+## Week 8: RAG-Powered Text-to-SQL
+
+**Deployed app:** https://sql-quiz-week7.streamlit.app/ — open the **🤖 Text-to-SQL (RAG)** tab. No login is needed for this tab; the original SQL Quiz is in the second tab.
+
+### Architecture
+
+```text
+Question ──► Gemini embedding (RETRIEVAL_QUERY) ──► ChromaDB similarity search
+                                                        │  top-3 schema docs
+                                                        │  top-3 business-semantics docs
+                                                        │  top-3 few-shot examples
+                                                        ▼
+                          Prompt = retrieved schema + rules + examples + question
+                                                        ▼
+                               Gemini (gemini-2.5-flash) ──► SQL
+                                                        ▼
+        (extra credit) read-only execution on Supabase PostgreSQL ──► result table ──► validation
+```
+
+| Component | Choice |
+|---|---|
+| Database | Supabase PostgreSQL (Week 7), queried through the read-only `quiz_reader` role |
+| Vector database | ChromaDB (in-process, cosine similarity), rebuilt at app start |
+| Embeddings | Google `gemini-embedding-001` (768 dimensions) |
+| LLM | Google Gemini `gemini-2.5-flash` via the Gemini API |
+| Web app | Streamlit Community Cloud |
+
+**What is stored in the vector database** (`rag/knowledge.py`):
+
+1. **Database schema** – one document per table (columns, types, foreign keys), introspected live from PostgreSQL (`information_schema` / `pg_constraint`).
+2. **Business semantics** – rules such as "revenue = SUM(quantity × price), including Pending orders" and valid `status` values.
+3. **Few-shot examples** – 12 question/SQL pairs (the question is embedded, the SQL is stored as metadata). They intentionally differ from the five quiz questions.
+
+At query time the question is embedded and ChromaDB is searched separately for each knowledge type (`rag/engine.py: retrieve`). The retrieved documents, and only those, are placed in the prompt, and the UI shows the retrieved items with similarity scores and the full prompt.
+
+**Extra credit (implemented):** the generated SQL is executed with the same read-only machinery as the quiz (single `SELECT`, read-only transaction, 5 s timeout, 100-row cap). For the five quiz questions the result is compared with the reference SQL's result (ignoring row order, column names and extra columns) and a ✅/❌ outcome is shown. The reference SQL is never given to the LLM.
+
+### Run locally
+
+```bash
+git clone https://github.com/hanhan572/sql-quiz-week7.git
+cd sql-quiz-week7
+pip install -r requirements.txt
+cp .streamlit/secrets.toml.example .streamlit/secrets.toml   # then fill in real values
+streamlit run app.py
+```
+
+`secrets.toml` additionally needs `GEMINI_API_KEY` (free at https://aistudio.google.com/apikey). On Streamlit Community Cloud, add the same keys under *App settings → Secrets*. Secrets and `.env` files are git-ignored and never committed.
+
+### Screenshots
+
+**Question → retrieved context → generated SQL**
+
+![Generated SQL](docs/screenshot-generated-sql.png)
+
+**Executed SQL, result table, and validation**
+
+![Execution and validation](docs/screenshot-validation.png)
+
+---
+
+# Week 7: SQL Quiz
 
 ## Live Application
 
@@ -147,6 +210,9 @@ sql-quiz-week7/
 │       └── database-check.yml
 ├── .streamlit/
 │   └── secrets.toml.example
+├── rag/
+│   ├── knowledge.py      # schema, business semantics, few-shot examples
+│   └── engine.py         # ChromaDB retrieval, Gemini generation, validation
 ├── scripts/
 │   └── check_database.py
 ├── app.py
