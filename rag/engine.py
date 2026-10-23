@@ -12,27 +12,35 @@ import requests
 from . import knowledge
 
 API = "https://generativelanguage.googleapis.com/v1beta"
-DEFAULT_MODEL = "gemini-3.8-flash"
+# Tried in order; the next one is used when a model is overloaded, slow, or unavailable.
+DEFAULT_MODELS = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3.8-flash"]
 DEFAULT_EMBED_MODEL = "gemini-embedding-001"
 EMBED_DIM = 768
 TOP_K = {"schema": 3, "semantics": 3, "example": 3}
 
 
 # ---------------------------------------------------------------- Gemini API
-def _post(cfg, path, payload):
-    for attempt in range(4):
-        resp = requests.post(
-            f"{API}/{path}",
-            headers={"x-goog-api-key": cfg["GEMINI_API_KEY"], "Content-Type": "application/json"},
-            json=payload,
-            timeout=60,
-        )
-        if resp.status_code in (429, 500, 503) and attempt < 3:
-            time.sleep(2 ** attempt)
-            continue
-        if not resp.ok:
-            raise RuntimeError(f"Gemini API error {resp.status_code}: {resp.text[:300]}")
-        return resp.json()
+def _post(cfg, path, payload, timeout=25, tries=3):
+    last = None
+    for attempt in range(tries):
+        try:
+            resp = requests.post(
+                f"{API}/{path}",
+                headers={"x-goog-api-key": cfg["GEMINI_API_KEY"], "Content-Type": "application/json"},
+                json=payload,
+                timeout=timeout,
+            )
+        except requests.RequestException as exc:
+            last = RuntimeError(f"Gemini request failed: {type(exc).__name__}")
+        else:
+            if resp.ok:
+                return resp.json()
+            last = RuntimeError(f"Gemini API error {resp.status_code}: {resp.text[:300]}")
+            if resp.status_code not in (429, 500, 503):
+                raise last
+        if attempt < tries - 1:
+            time.sleep(1 + attempt)
+    raise last
 
 
 def embed(cfg, texts, task):
@@ -150,17 +158,23 @@ def extract_sql(text):
 
 def generate_sql(cfg, question, retrieved):
     prompt = build_prompt(question, retrieved)
-    model = cfg.get("GEMINI_MODEL", DEFAULT_MODEL)
-    data = _post(cfg, f"models/{model}:generateContent", {
+    models = [cfg["GEMINI_MODEL"]] if cfg.get("GEMINI_MODEL") else DEFAULT_MODELS
+    payload = {
         "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0, "maxOutputTokens": 4096},
-    })
-    try:
-        text = "".join(p.get("text", "") for p in data["candidates"][0]["content"]["parts"])
-    except (KeyError, IndexError):
-        raise RuntimeError(f"Gemini returned no SQL: {str(data)[:300]}")
-    return extract_sql(text), prompt
+    }
+    errors = []
+    for model in models:
+        try:
+            data = _post(cfg, f"models/{model}:generateContent", payload, tries=2)
+            text = "".join(p.get("text", "") for p in data["candidates"][0]["content"]["parts"])
+            if text.strip():
+                return extract_sql(text), prompt, model
+            errors.append(f"{model}: empty response")
+        except (RuntimeError, KeyError, IndexError) as exc:
+            errors.append(f"{model}: {exc}")
+    raise RuntimeError("All Gemini models failed. " + " | ".join(errors))
 
 
 # ---------------------------------------------------------------- validation
