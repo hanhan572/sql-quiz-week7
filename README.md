@@ -18,7 +18,7 @@ Question ──► Gemini embedding (RETRIEVAL_QUERY) ──► ChromaDB similar
                                                         ▼
                           Prompt = retrieved schema + rules + examples + question
                                                         ▼
-                               Gemini (gemini-2.5-flash) ──► SQL
+                               Gemini (gemini-3.8-flash) ──► SQL
                                                         ▼
         (extra credit) read-only execution on Supabase PostgreSQL ──► result table ──► validation
 ```
@@ -28,7 +28,7 @@ Question ──► Gemini embedding (RETRIEVAL_QUERY) ──► ChromaDB similar
 | Database | Supabase PostgreSQL (Week 7), queried through the read-only `quiz_reader` role |
 | Vector database | ChromaDB (in-process, cosine similarity), rebuilt at app start |
 | Embeddings | Google `gemini-embedding-001` (768 dimensions) |
-| LLM | Google Gemini `gemini-2.5-flash` via the Gemini API |
+| LLM | Google Gemini `gemini-3.8-flash` via the Gemini API |
 | Web app | Streamlit Community Cloud |
 
 **What is stored in the vector database** (`rag/knowledge.py`):

@@ -12,7 +12,7 @@ import requests
 from . import knowledge
 
 API = "https://generativelanguage.googleapis.com/v1beta"
-DEFAULT_MODEL = "gemini-2.5-flash"
+DEFAULT_MODEL = "gemini-3.8-flash"
 DEFAULT_EMBED_MODEL = "gemini-embedding-001"
 EMBED_DIM = 768
 TOP_K = {"schema": 3, "semantics": 3, "example": 3}
@@ -154,8 +154,7 @@ def generate_sql(cfg, question, retrieved):
     data = _post(cfg, f"models/{model}:generateContent", {
         "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0, "maxOutputTokens": 1024,
-                             "thinkingConfig": {"thinkingBudget": 0}},
+        "generationConfig": {"temperature": 0, "maxOutputTokens": 4096},
     })
     try:
         text = "".join(p.get("text", "") for p in data["candidates"][0]["content"]["parts"])
